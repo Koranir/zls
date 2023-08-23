@@ -1123,7 +1123,14 @@ fn resolveTypeOfNodeUncached(analyser: *Analyser, node_handle: NodeWithHandle) e
                         continue;
                     if (!argument_type.type.is_type_val) continue;
 
-                    try analyser.bound_type_params.put(analyser.gpa, decl_param, argument_type);
+                    const gop = try analyser.bound_type_params.getOrPut(analyser.gpa, decl_param);
+                    if (gop.found_existing) {
+                        // TODO figure out how to resolve nested bound types
+                        // see 'completion - nested generic function' test
+                        return null;
+                    } else {
+                        gop.value_ptr.* = argument_type;
+                    }
                 }
 
                 const has_body = decl.handle.tree.nodes.items(.tag)[decl_node] == .fn_decl;

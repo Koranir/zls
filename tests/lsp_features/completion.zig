@@ -103,6 +103,21 @@ test "completion - generic function" {
     });
 }
 
+test "completion - nested generic function" {
+    if (true) return error.SkipZigTest; // TODO
+    try testCompletion(
+        \\const Foo = struct { alpha: u32 };
+        \\pub fn Box(comptime T: type) type {
+        \\    return struct { inner: T };
+        \\}
+        \\const foo_box_box: Box(Box(Foo)) = undefined;
+        \\const foo_box = foo_box_box.inner;
+        \\const foo = foo_box.inner.<cursor>;
+    , &.{
+        .{ .label = "alpha", .kind = .Field, .detail = "alpha: u32" },
+    });
+}
+
 test "completion - std.ArrayList" {
     if (!std.process.can_spawn) return error.SkipZigTest;
     try testCompletion(
