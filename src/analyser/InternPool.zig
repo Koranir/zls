@@ -1311,6 +1311,8 @@ fn coerceInt(
         .int_i64_value => |int| .{ .int_i64_value = .{ .int = int.int, .ty = dest_ty } },
         .int_u64_value => |int| .{ .int_u64_value = .{ .int = int.int, .ty = dest_ty } },
         .int_big_value => |int| .{ .int_big_value = .{ .int = int.int, .ty = dest_ty } },
+        .undefined_value => |info| .{ .undefined_value = .{ .ty = info.ty } },
+        .unknown_value => |info| .{ .unknown_value = .{ .ty = info.ty } },
         else => unreachable,
     });
 }
