@@ -1173,9 +1173,9 @@ fn resolveTypeOfNodeUncached(analyser: *Analyser, node_handle: NodeWithHandle) e
 
                 return TypeWithHandle{
                     .type = .{
-                        .data = .{ .@"comptime" = .{
-                            .interpreter = interpreter,
-                            .value = value,
+                        .data = .{ .intern_pool_index = .{
+                            .node = value.node_idx,
+                            .index = value.index,
                         } },
                         .is_type_val = interpreter.ip.isType(value.index),
                     },
@@ -1591,11 +1591,12 @@ pub const Type = struct {
         // TODO: Unused?
         array_index,
 
-        @"comptime": struct {
-            interpreter: *ComptimeInterpreter,
-            value: ComptimeInterpreter.Value,
+        intern_pool_index: struct {
+            /// may be 0
+            node: Ast.Node.Index,
+            /// this stores both the type and the value
+            index: InternPool.Index,
         },
-        intern_pool_index: InternPool.Index,
     },
     /// If true, the type `type`, the attached data is the value of the type value.
     is_type_val: bool,
@@ -1628,12 +1629,9 @@ pub const TypeWithHandle = struct {
                     }
                 },
                 .array_index => {},
-                .@"comptime" => |co| {
-                    std.hash.autoHash(hasher, co.value.node_idx);
-                    std.hash.autoHash(hasher, co.value.index);
-                },
-                .intern_pool_index => |index| {
-                    std.hash.autoHash(hasher, index);
+                .intern_pool_index => |payload| {
+                    std.hash.autoHash(hasher, payload.node);
+                    std.hash.autoHash(hasher, payload.index);
                 },
             }
         }
@@ -1683,13 +1681,10 @@ pub const TypeWithHandle = struct {
                     }
                 },
                 .array_index => {},
-                .@"comptime" => {
-                    return a.type.data.@"comptime".value.index == b.type.data.@"comptime".value.index and
-                        a.type.data.@"comptime".value.node_idx == b.type.data.@"comptime".value.node_idx;
-                    // TODO
-                },
                 .intern_pool_index => {
-                    return a.type.data.intern_pool_index == b.type.data.intern_pool_index;
+                    if (a.type.data.intern_pool_index.node != b.type.data.intern_pool_index.node) return false;
+                    if (a.type.data.intern_pool_index.index != b.type.data.intern_pool_index.index) return false;
+                    return true;
                 },
             }
 
@@ -2841,7 +2836,10 @@ pub const DeclWithHandle = struct {
             .intern_pool_index => |payload| {
                 if (payload.index != .none and !analyser.ip.?.isUnknownDeep(payload.index)) {
                     return TypeWithHandle{
-                        .type = .{ .data = .{ .intern_pool_index = payload.index }, .is_type_val = false },
+                        .type = .{ .data = .{ .intern_pool_index = .{
+                            .node = 0,
+                            .index = payload.index,
+                        } }, .is_type_val = false },
                         .handle = self.handle,
                     };
                 } else {
@@ -4378,7 +4376,7 @@ pub fn referencedTypes(
         collector.needs_type_reference = false;
         _ = try analyser.addReferencedTypes(resolved_type, collector.*);
         resolved_type_str.* = switch (resolved_type.type.data) {
-            .@"comptime" => |co| try std.fmt.allocPrint(allocator, "{}", .{co.value.index.fmt(co.interpreter.ip)}),
+            .intern_pool_index => |payload| try std.fmt.allocPrint(allocator, "{}", .{payload.index.fmt(analyser.ip.?)}),
             else => "type",
         };
     } else {

@@ -76,21 +76,13 @@ fn typeToCompletion(
             for (bruh) |a|
                 try typeToCompletion(server, analyser, arena, list, .{ .original = a.type_with_handle }, orig_handle, a.descriptor);
         },
-        .@"comptime" => |co| try analyser_completions.dotCompletions(
-            arena,
-            list,
-            co.interpreter.ip,
-            co.value.index,
-            type_handle.type.is_type_val,
-            co.value.node_idx,
-        ),
-        .intern_pool_index => |index| try analyser_completions.dotCompletions(
+        .intern_pool_index => |payload| try analyser_completions.dotCompletions(
             arena,
             list,
             &server.ip,
-            index,
+            payload.index,
             type_handle.type.is_type_val,
-            null,
+            if (payload.node == 0) null else payload.node,
         ),
         else => {},
     }
@@ -485,7 +477,10 @@ fn declToCompletion(context: DeclToCompletionContext, decl_handle: Analyser.Decl
         },
         .intern_pool_index => |payload| {
             const ty = (try decl_handle.resolveType(context.analyser)) orelse Analyser.TypeWithHandle{
-                .type = .{ .data = .{ .intern_pool_index = payload.index }, .is_type_val = false },
+                .type = .{ .data = .{ .intern_pool_index = .{
+                    .node = 0,
+                    .index = payload.index,
+                } }, .is_type_val = false },
                 .handle = decl_handle.handle,
             };
 
