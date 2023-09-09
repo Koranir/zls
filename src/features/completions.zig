@@ -81,7 +81,6 @@ fn typeToCompletion(
             list,
             &server.ip,
             payload.index,
-            type_handle.type.is_type_val,
             if (payload.node == 0) null else payload.node,
         ),
         else => {},
