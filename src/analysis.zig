@@ -1170,7 +1170,6 @@ fn resolveTypeOfNodeUncached(analyser: *Analyser, node_handle: NodeWithHandle) e
                     }
                     return null;
                 };
-                const is_type_val = interpreter.ip.indexToKey(value.index).typeOf() == .type_type;
 
                 return TypeWithHandle{
                     .type = .{
@@ -1178,7 +1177,7 @@ fn resolveTypeOfNodeUncached(analyser: *Analyser, node_handle: NodeWithHandle) e
                             .interpreter = interpreter,
                             .value = value,
                         } },
-                        .is_type_val = is_type_val,
+                        .is_type_val = interpreter.ip.isType(value.index),
                     },
                     .handle = node_handle.handle,
                 };
@@ -4307,7 +4306,7 @@ pub fn referencedTypes(
         collector.needs_type_reference = false;
         _ = try analyser.addReferencedTypes(resolved_type, collector.*);
         resolved_type_str.* = switch (resolved_type.type.data) {
-            .@"comptime" => |co| try std.fmt.allocPrint(allocator, "{}", .{co.value.index.fmt(co.interpreter.ip.*)}),
+            .@"comptime" => |co| try std.fmt.allocPrint(allocator, "{}", .{co.value.index.fmt(co.interpreter.ip)}),
             else => "type",
         };
     } else {
