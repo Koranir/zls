@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const SemaCases = @import("tests/SemaCases.zig");
 
 const zls_version = std.SemanticVersion{ .major = 0, .minor = 12, .patch = 0 };
 
@@ -185,8 +186,6 @@ pub fn build(b: *std.build.Builder) !void {
         },
     });
 
-    try addSemaTests(b, test_step, zls_module, target);
-
     tests.addModule("zls", zls_module);
     tests.addModule("known-folders", known_folders_module);
     tests.addModule("diffz", diffz_module);
@@ -205,6 +204,16 @@ pub fn build(b: *std.build.Builder) !void {
     src_tests.addModule("binned_allocator", binned_allocator_module);
     src_tests.addModule("build_options", build_options_module);
     test_step.dependOn(&b.addRunArtifact(src_tests).step);
+
+    var cases: SemaCases = .{ .allocator = b.allocator };
+    try cases.addCasesFromDir(b.pathFromRoot("tests/sema"), .{ .ignore_annotation = false });
+    try cases.addCasesFromDir(b.pathFromRoot("src"), .{ .ignore_annotation = true });
+
+    // TODO zig_lib_dir is not being resolved
+    if (b.zig_lib_dir) |dir_path| {
+        try cases.addCasesFromDir(dir_path.getPath(b), .{ .ignore_annotation = true });
+    }
+    try cases.lowerToBuild(b, test_step, zls_module, target);
 
     if (coverage) {
         const include_pattern = b.fmt("--include-pattern=/src", .{});
@@ -237,81 +246,5 @@ pub fn build(b: *std.build.Builder) !void {
         merge_step.step.dependOn(&tests_run.step);
         merge_step.step.dependOn(&src_tests_run.step);
         test_step.dependOn(&merge_step.step);
-    }
-}
-
-fn addSemaTests(
-    b: *std.build.Builder,
-    test_step: *std.build.Step,
-    zls_module: *std.build.Module,
-    target: std.zig.CrossTarget,
-) !void {
-    const sema_test = b.addExecutable(.{
-        .name = "zls_sema_test",
-        .root_source_file = .{ .path = "tests/sema_tester.zig" },
-        .target = target,
-        .optimize = .Debug,
-    });
-    sema_test.addModule("zls", zls_module);
-
-    addSemaCasesFromRecursiveDir(b, test_step, sema_test, .{ .path = b.pathFromRoot("tests/sema") }, false);
-    addSemaCasesFromRecursiveDir(b, test_step, sema_test, .{ .path = b.pathFromRoot("src") }, true);
-
-    // TODO zig_lib_dir is not being resolved
-    if (b.zig_lib_dir) |dir_path| {
-        addSemaCasesFromRecursiveDir(b, test_step, sema_test, dir_path, true);
-    }
-}
-
-fn addSemaCasesFromRecursiveDir(
-    b: *std.build.Builder,
-    test_step: *std.build.Step,
-    sema_test: *std.build.Step.Compile,
-    dir_path: std.build.LazyPath,
-    is_fuzz: bool,
-) void {
-    var dir = std.fs.openIterableDirAbsolute(dir_path.getPath(b), .{}) catch unreachable;
-    defer dir.close();
-
-    addSemaCasesFromRecursiveDir2(b, test_step, sema_test, dir, is_fuzz);
-}
-
-fn addSemaCasesFromRecursiveDir2(
-    b: *std.build.Builder,
-    test_step: *std.build.Step,
-    sema_test: *std.build.Step.Compile,
-    dir: std.fs.IterableDir,
-    is_fuzz: bool,
-) void {
-    var iter = dir.iterateAssumeFirstIteration();
-    while (iter.next() catch unreachable) |entry| {
-        switch (entry.kind) {
-            .file => {
-                if (!std.mem.eql(u8, std.fs.path.extension(entry.name), ".zig")) continue;
-                if (std.mem.eql(u8, entry.name, "udivmodti4_test.zig")) continue; // exclude very large file
-                if (std.mem.eql(u8, entry.name, "udivmoddi4_test.zig")) continue; // exclude very large file
-                if (std.mem.eql(u8, entry.name, "darwin.zig")) continue; // TODO fix upstream issue with OS_SIGNPOST_ID_INVALID
-                if (std.mem.eql(u8, entry.name, "lock.zig")) continue; // TODO
-
-                const run_test = b.addRunArtifact(sema_test);
-                test_step.dependOn(&run_test.step);
-                run_test.setName(b.fmt("run sema test on {s}", .{entry.name}));
-
-                run_test.stdio = .zig_test;
-
-                var out_buffer: [std.fs.MAX_PATH_BYTES]u8 = undefined;
-                const file_path = dir.dir.realpath(entry.name, &out_buffer) catch unreachable;
-                run_test.addFileArg(.{ .path = file_path });
-                if (is_fuzz) {
-                    run_test.addArg("--fuzz");
-                }
-            },
-            .directory => {
-                var sub_dir = dir.dir.openIterableDir(entry.name, .{}) catch unreachable;
-                defer sub_dir.close();
-                addSemaCasesFromRecursiveDir2(b, test_step, sema_test, sub_dir, is_fuzz);
-            },
-            else => {},
-        }
     }
 }
