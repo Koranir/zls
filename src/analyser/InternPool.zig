@@ -1488,7 +1488,7 @@ pub fn init(gpa: Allocator) Allocator.Error!InternPool {
 
     for (items) |item| {
         if (builtin.is_test or builtin.mode == .Debug) {
-            var failing_allocator = std.testing.FailingAllocator.init(undefined, 0);
+            var failing_allocator = std.testing.FailingAllocator.init(undefined, .{});
             std.testing.expectEqual(item.index, ip.get(failing_allocator.allocator(), item.key) catch unreachable) catch unreachable;
         } else {
             assert(item.index == ip.get(undefined, item.key) catch unreachable);
